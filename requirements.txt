@@ -1,0 +1,10 @@
+carla~=0.9.13
+networkx
+numpy; python_version < '3.0'
+numpy==1.18.4; python_version >= '3.0'
+distro
+Shapely==1.6.4.post2
+transforms3d~=0.4.1
+numpy~=1.23.3
+opencv-python
+tqdm~=4.64.1
