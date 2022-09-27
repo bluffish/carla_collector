@@ -1,6 +1,6 @@
 # Carla collector
 
-Lightweight system for gathering data using CARLA.
+Lightweight system for gathering data using CARLA. Should allow you to effortlessly gather as much data as you want. 
 
 To use, make a new config file. The keys should be pretty self-explanatory if you look at the samples. Use a config with
 
