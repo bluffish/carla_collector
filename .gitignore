@@ -1,2 +1,13 @@
 data
 data/
+.idea
+.ipynb_checkpoints
+.ruff_cache
+**/__pycache__/
+__pycache__/
+
+nuscenes
+venv
+
+*.npy
+*.pt
