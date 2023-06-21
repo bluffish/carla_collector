@@ -1,0 +1,11 @@
+save_path: "./data/train"
+carla_path: "../carla/carla13_rss/CarlaUE4.sh"
+carla_port: -1
+carla_host: "127.0.0.1"
+"carla_timeout": 30.0
+episode_count: 50
+tick_interval: 0.05
+start_tick: 0
+num_ego: 5
+num_vehicles: 50
+episode_length: 100

@@ -12,6 +12,39 @@ from src.vehicle import Vehicle
 from PIL import Image
 
 
+def get_intrinsics(sensor_options):
+    intrinsics = np.identity(3)
+    intrinsics[0, 2] = sensor_options['image_size_x'] / 2.0
+    intrinsics[1, 2] = sensor_options['image_size_y'] / 2.0
+    intrinsics[0, 0] = intrinsics[1, 1] = sensor_options['image_size_x'] / (
+            2.0 * np.tan(sensor_options['fov'] * np.pi / 360.0))
+
+    return intrinsics
+
+
+def get_extrinsics(translation, rotation):
+    pitch, yaw, roll = np.radians([rotation.pitch, rotation.yaw, -rotation.roll])
+
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    cp, sp = np.cos(pitch), np.sin(pitch)
+    cr, sr = np.cos(roll), np.sin(roll)
+
+    R = np.array([
+        [cy * cr + sy * sp * sr, -cy * sr + sy * sp * cr, sy * cp],
+        [cp * sr, cp * cr, -sp],
+        [-sy * cr + cy * sp * sr, sy * sr + cy * sp * cr, cy * cp]
+    ])
+
+    t = np.array([translation.x, translation.y, translation.z]).reshape(3, 1)
+
+    H = np.zeros((4, 4))
+    H[0:3, 0:3] = R
+    H[0:3, 3] = t[:, 0]
+    H[3, 3] = 1
+
+    return H
+
+
 class Environment:
     def __init__(
             self,
@@ -32,15 +65,7 @@ class Environment:
         self.traffic_manager_port = find_free_port()
         self.traffic_manager = self.carla.get_trafficmanager(self.traffic_manager_port)
 
-        self.world = self.carla.get_world()
-        self.original_settings = self.world.get_settings()
-        self.world.unload_map_layer(carla.MapLayer.Foliage)
-
-        if self.sync:
-            settings = self.world.get_settings()
-            settings.synchronous_mode = True
-            settings.fixed_delta_seconds = tick_interval
-            self.world.apply_settings(settings)
+        # self.load_world("Town01_Opt", tick_interval, sync=sync)
 
         self.frame = 0
         self.timestamp = 0.0
@@ -48,23 +73,7 @@ class Environment:
 
         self.vehicles = []
 
-    def add_vehicle(self, ego=False):
-        vehicle = Vehicle(self, ego=ego)
-        self.vehicles.append(vehicle)
-        return vehicle
-
-    def run_episode(self, name, num_ego=5, num_traffic=50, episode_length=50):
-        print("Starting new episode...")
-
-        ego_vehicles = []
-
-        for i in tqdm(range(0, num_ego), desc="Spawning ego vehicles..."):
-            ego_vehicles.append(self.add_vehicle(ego=True))
-
-        for i in tqdm(range(0, num_traffic), desc="Spawning traffic..."):
-            self.add_vehicle()
-
-        self.world.set_weather(getattr(carla.WeatherParameters, random.choice([
+        self.weather = [
             "Default",
             "ClearNoon",
             "CloudyNoon",
@@ -80,17 +89,71 @@ class Environment:
             "MidRainSunset",
             "HardRainSunset",
             "SoftRainSunset",
-        ])))
+        ]
 
-        if os.path.exists(os.path.join("./"+name, "agents", "0", "back_camera")) and self.count == -1:
-            self.count = len(os.listdir(os.path.join("./"+name, "agents", "0", "back_camera")))
+        self.towns = [
+            "Town01_Opt",
+            "Town02_Opt",
+            "Town04_Opt",
+            "Town05_Opt",
+            "Town06_Opt",
+            "Town07_Opt",
+            "Town10HD_Opt",
+        ]
+
+        self.current_town = -1
+
+    def load_world(self, town, tick_interval, sync=True):
+        self.world = self.carla.load_world(town)
+
+        self.original_settings = self.world.get_settings()
+        self.world.unload_map_layer(carla.MapLayer.Foliage)
+
+        if self.sync:
+            settings = self.world.get_settings()
+            settings.synchronous_mode = True
+            settings.fixed_delta_seconds = tick_interval
+            self.world.apply_settings(settings)
+
+        self.world.unload_map_layer(carla.MapLayer.Foliage)
+
+    def add_vehicle(self, ego=False, ood=False):
+        vehicle = Vehicle(self, ego=ego, ood=ood)
+        self.vehicles.append(vehicle)
+        return vehicle
+
+    def run_episode(self, save_path, num_ego=5, num_traffic=50, episode_length=50):
+        self.current_town += 1
+        self.current_town = self.current_town % len(self.towns)
+
+        print(f"Starting new episode on {self.towns[self.current_town]}")
+        self.load_world(self.towns[self.current_town], self.tick_interval, sync=self.sync)
+
+        ego_vehicles = []
+
+        for i in tqdm(range(0, num_ego), desc="Spawning ego vehicles..."):
+            ego_vehicles.append(self.add_vehicle(ego=True))
+
+        for i in tqdm(range(0, num_traffic), desc="Spawning traffic..."):
+            self.add_vehicle(ood=False)
+
+        self.world.set_weather(getattr(carla.WeatherParameters, random.choice(self.weather)))
+
+        if os.path.exists(os.path.join("./", save_path, "agents", "0", "back_camera")) and self.count == -1:
+            self.count = len(os.listdir(os.path.join("./", save_path, "agents", "0", "back_camera")))
+
+        for i in range(5):
+            if self.sync:
+                self.world.tick()
+            else:
+                self.world.wait_for_tick()
 
         for tick in tqdm(range(0, episode_length*5), desc="Gathering data..."):
             if tick % 5 == 0:
                 for vehicle_id, vehicle in enumerate(ego_vehicles):
                     vehicle.tick()
 
-                    agent_path = os.path.join("./"+name, "agents", str(vehicle_id))
+                    agent_path = os.path.join("./", save_path, "agents", str(vehicle_id))
 
                     if not os.path.exists(agent_path):
                         os.makedirs(agent_path, exist_ok=True)
@@ -116,8 +179,11 @@ class Environment:
                                     ],
                                 }
 
+                                info_data['sensors'][sensor_name]['extrinsic'] = get_extrinsics(sensor.transform.location, sensor.transform.rotation).tolist()
+
                             if hasattr(sensor, 'sensor_options'):
                                 info_data['sensors'][sensor_name]['sensor_options'] = sensor.sensor_options
+                                info_data['sensors'][sensor_name]['intrinsic'] = get_intrinsics(sensor.sensor_options).tolist()
 
                         with open(os.path.join(agent_path, 'sensors.json'), 'w') as f:
                             json.dump(info_data, f)
@@ -156,7 +222,7 @@ class Environment:
             vehicle.destroy()
         self.vehicles = []
 
-        time.sleep(0.5)
+        time.sleep(2)
 
         print("Done\n")
 

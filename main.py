@@ -7,7 +7,7 @@ import subprocess
 import argparse
 import signal
 import socket
-import json
+import yaml
 import time
 import os
 
@@ -24,46 +24,47 @@ def run():
     parser.add_argument("config")
     args = parser.parse_args()
 
-    print(f"Using config {args.config}");
-    with open(args.config) as f:
-        conf = json.load(f)
+    print(f"Using config {args.config}")
 
-    name = conf['name']
+    with open(args.config, 'r') as file:
+        conf = yaml.safe_load(file)
+
+    save_path = conf['save_path']
+    carla_path = conf['carla_path']
     episode_count = conf['episode_count']
     carla_port = conf['carla_port']
-
-    if carla_port == -1:
-        carla_port = find_free_port()
-        print(f"Using port {carla_port}")
-
     carla_host = conf['carla_host']
     carla_timeout = conf['carla_timeout']
     tick_interval = conf['tick_interval']
     num_ego = conf['num_ego']
-    num_traffic = conf['number-of-vehicles']
+    num_traffic = conf['num_vehicles']
     episode_length = conf['episode_length']
     start_tick = conf['start_tick']
 
     carla = None
 
-    try:
+    if carla_port == -1:
+        carla_port = find_free_port()
+        print(f"Using port {carla_port}")
         print("Starting CARLA...")
-        carla = subprocess.Popen(["../carla/CarlaUE4.sh", "-RenderOffScreen", f"-world-port={carla_port}", "-quality", "-level=Epic"])
-        time.sleep(20)
+        carla = subprocess.Popen([carla_path, "-RenderOffScreen", f"-world-port={carla_port}", "-quality", "-level=Epic"])
+        time.sleep(40)
         print("Done...")
 
+    try:
         env = Environment(carla_host=carla_host, carla_port=carla_port, carla_timeout=carla_timeout,
                           tick_interval=tick_interval)
 
         env.count = start_tick
 
         for i in range(0, episode_count):
-            env.run_episode(name, num_ego=num_ego, num_traffic=num_traffic,
+            env.run_episode(save_path, num_ego=num_ego, num_traffic=num_traffic,
                             episode_length=episode_length)
 
         print(f"Done gathering {episode_count} episodes.")
         print("Exiting...")
         os.killpg(os.getpgid(carla.pid), signal.SIGTERM)
+
     except Exception as e:
         print(traceback.format_exc())
         print("Exiting...")
