@@ -1,75 +1,65 @@
-import traceback
+import argparse
+import subprocess
+import signal
+import time
+import yaml
 
 from src.environment import Environment
-from contextlib import closing
-
-import subprocess
-import argparse
-import signal
-import socket
-import yaml
-import time
-import os
-
-
-def find_free_port():
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-        s.bind(('', 0))
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        return s.getsockname()[1]
+from src.utils import find_free_port
 
 
 def run():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config")
-    args = parser.parse_args()
-
     print(f"Using config {args.config}")
 
     with open(args.config, 'r') as file:
-        conf = yaml.safe_load(file)
+        config = yaml.safe_load(file)
 
-    save_path = conf['save_path']
-    carla_path = conf['carla_path']
-    episode_count = conf['episode_count']
-    carla_port = conf['carla_port']
-    carla_host = conf['carla_host']
-    carla_timeout = conf['carla_timeout']
-    tick_interval = conf['tick_interval']
-    num_ego = conf['num_ego']
-    num_traffic = conf['num_vehicles']
-    episode_length = conf['episode_length']
-    start_tick = conf['start_tick']
-
-    carla = None
-
-    if carla_port == -1:
-        carla_port = find_free_port()
-        print(f"Using port {carla_port}")
+    if config['carla_port'] == -1:
+        config['carla_port'] = find_free_port()
+        print(f"Using port {config['carla_port']}")
         print("Starting CARLA...")
-        carla = subprocess.Popen([carla_path, "-RenderOffScreen", f"-world-port={carla_port}", "-quality", "-level=Epic"])
-        time.sleep(40)
+
+        carla = subprocess.Popen([
+            config['carla_path'],
+            "-RenderOffScreen",
+            f"-world-port={config['carla_port']}",
+            "-quality-level=Epic",
+            f"-graphicsadapter={gpu}"
+        ])
+        time.sleep(10)
         print("Done...")
 
-    try:
-        env = Environment(carla_host=carla_host, carla_port=carla_port, carla_timeout=carla_timeout,
-                          tick_interval=tick_interval)
+    env = Environment(
+        carla_host=config['carla_host'],
+        carla_port=config['carla_port'],
+        carla_timeout=config['carla_timeout'],
+        tick_interval=config['tick_interval']
+    )
 
-        env.count = start_tick
+    env.count = config['start_tick']
 
-        for i in range(0, episode_count):
-            env.run_episode(save_path, num_ego=num_ego, num_traffic=num_traffic,
-                            episode_length=episode_length)
+    for i in range(0, config['episode_count']):
+        env.run_episode(
+            config['save_path'],
+            num_ego=config['num_ego'],
+            num_traffic=config['num_vehicles'],
+            episode_length=config['episode_length']
+        )
 
-        print(f"Done gathering {episode_count} episodes.")
-        print("Exiting...")
-        os.killpg(os.getpgid(carla.pid), signal.SIGTERM)
-
-    except Exception as e:
-        print(traceback.format_exc())
-        print("Exiting...")
-        os.killpg(os.getpgid(carla.pid), signal.SIGTERM)
+    print(f"Done gathering {config['episode_count']} episodes.\nExiting...")
 
 
 if __name__ == '__main__':
+    import os
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config")
+    parser.add_argument('-g', '--gpu', required=False, default=0, type=int)
+    args = parser.parse_args()
+
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    config = args.config
+    gpu = args.gpu + 1
+
     run()
