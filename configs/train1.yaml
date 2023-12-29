@@ -3,9 +3,9 @@ carla_path: "../carla/carla13/CarlaUE4.sh"
 carla_port: 2000
 carla_host: "127.0.0.1"
 carla_timeout: 30.0
-episode_count: 80
+episode_count: 8
 tick_interval: 0.05
-start_tick: -1
+start_tick: 3200
 num_ego: 5
 num_vehicles: 50
 episode_length: 100

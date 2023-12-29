@@ -45,8 +45,7 @@ class Vehicle:
 
         while self.vehicle is None:
             try:
-                self.vehicle = self.env.world.spawn_actor(bp,
-                                                          random.choice(self.env.world.get_map().get_spawn_points()))
+                self.vehicle = self.env.world.spawn_actor(bp, random.choice(self.env.world.get_map().get_spawn_points()))
             except RuntimeError:
                 pass
 
@@ -66,7 +65,7 @@ class Vehicle:
                 'front': (0, 0, 2.4, 0),
                 'right_front': (0, 0, 2.4, 60),
                 'left_back': (0, 0, 2.4, -120),
-                'back_camera': (0, 0, 2.4, 180),
+                'back': (0, 0, 2.4, 180),
                 'right_back': (0, 0, 2.4, 120),
             }
 
@@ -74,9 +73,10 @@ class Vehicle:
                 transform = carla.Transform(carla.Location(x=translation[0], y=translation[1], z=translation[2]), carla.Rotation(yaw=translation[3]))
 
                 self.sensors[f"{sensor}_camera"] = RGBCamera(self.vehicle, transform, options)
-                # self.sensors[f"{sensor}_semantic"] = SemanticSegmentationCamera(self.vehicle, transform, options)
+                self.sensors[f"{sensor}_depth"] = DepthCamera(self.vehicle, transform, options)
+                self.sensors[f"{sensor}_semantic"] = SemanticSegmentationCamera(self.vehicle, transform, options)
 
-            fov_degrees = 90
+            fov_degrees = 8.25
             bev_height = (100 / 2) / math.tan(math.radians(fov_degrees) / 2)
 
             self.sensors['bev_semantic'] = SemanticSegmentationCamera(self.vehicle,

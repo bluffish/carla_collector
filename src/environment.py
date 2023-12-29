@@ -20,7 +20,8 @@ class Environment:
         carla_port='6000',
         carla_timeout=5.0,
         sync=True,
-        tick_interval=0.05
+        tick_interval=0.05,
+        ood=None
     ):
 
         self.world = None
@@ -41,6 +42,7 @@ class Environment:
         self.timestamp = 0.0
 
         self.vehicles = []
+        self.ood = ood
 
         self.weather = [
             "ClearNoon",
@@ -56,10 +58,12 @@ class Environment:
         ]
 
         self.town_index = 0
+
         self.towns = [
             "Town10HD_Opt",
             "Town03_Opt",
             "Town05_Opt",
+            "Town07_Opt",
             "Town02_Opt"
         ]
 
@@ -68,8 +72,8 @@ class Environment:
 
         self.original_settings = self.world.get_settings()
         self.world.unload_map_layer(carla.MapLayer.Foliage)
-        self.world.unload_map_layer(carla.MapLayer.Props)
-        self.world.unload_map_layer(carla.MapLayer.StreetLights)
+        self.world.unload_map_layer(carla.MapLayer.ParkedVehicles)
+        self.world.unload_map_layer(carla.MapLayer.ParkedVehicles)
 
         if self.sync:
             settings = self.world.get_settings()
@@ -84,6 +88,7 @@ class Environment:
 
     def run_episode(self, save_path, num_ego=5, num_traffic=50, episode_length=50):
         ego_vehicles = []
+        animal_locations = []
 
         print(f"Using town: {self.towns[self.town_index]}")
         self.load_world(self.towns[self.town_index])
@@ -91,20 +96,62 @@ class Environment:
         self.town_index %= len(self.towns)
 
         weather_index = 0
-
         for _ in tqdm(range(num_ego), desc="Spawning ego vehicles..."):
             ego_vehicles.append(self.add_vehicle(ego=True))
+
         for _ in tqdm(range(num_traffic), desc="Spawning traffic..."):
             self.add_vehicle(ood=False)
-
-        if os.path.exists(os.path.join("./", save_path, "agents", "0", "back_camera")) and self.count == -1:
-            self.count = len(os.listdir(os.path.join("./", save_path, "agents", "0", "back_camera")))
 
         for _ in range(5):
             if self.sync:
                 self.world.tick()
             else:
                 self.world.wait_for_tick()
+
+        if self.ood is not None:
+            for _ in tqdm(range(40), "Spawning OOD"):
+                blueprint = self.world.get_blueprint_library().find(random.choice(self.ood))
+                animal = None
+
+                k = 0
+
+                while animal is None:
+                    if k > 30:
+                        break
+                    k += 1
+                    transform = random.choice(self.world.get_map().get_spawn_points())
+                    transform.location.z = 0.
+                    transform.rotation.yaw = random.randint(0, 360)
+
+                    good = True
+
+                    for location in animal_locations:
+                        d = transform.location.distance(location)
+
+                        if d < 5.:
+                            good = False
+                            break
+
+                    for actor in self.vehicles:
+                        d = transform.location.distance(actor.vehicle.get_location())
+
+                        if d < 5.:
+                            good = False
+                            break
+
+                    if good:
+                        animal = self.world.spawn_actor(blueprint, transform)
+                        animal_locations.append(transform.location)
+
+        for _ in range(5):
+            if self.sync:
+                self.world.tick()
+            else:
+                self.world.wait_for_tick()
+
+        if os.path.exists(os.path.join("./", save_path, "agents", "0", "back_camera")) and self.count == -1:
+            self.count = len(os.listdir(os.path.join("./", save_path, "agents", "0", "back_camera")))
+            print(f"Setting count to {self.count}")
 
         for vehicle_id, vehicle in enumerate(ego_vehicles):
             info_data = {'sensors': {}}
@@ -160,11 +207,12 @@ class Environment:
                 self.world.wait_for_tick()
 
         print("Destroying")
-        time.sleep(2)
+        time.sleep(4)
 
         for vehicle in self.vehicles:
             vehicle.destroy()
         self.vehicles = []
-        time.sleep(2)
+
+        time.sleep(4)
 
         print("Done\n")

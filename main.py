@@ -26,14 +26,21 @@ def run():
             "-quality-level=Epic",
             f"-graphicsadapter={gpu}"
         ])
+
         time.sleep(10)
         print("Done...")
+
+    if 'ood' in config:
+        ood = config['ood']
+    else:
+        ood = None
 
     env = Environment(
         carla_host=config['carla_host'],
         carla_port=config['carla_port'],
         carla_timeout=config['carla_timeout'],
-        tick_interval=config['tick_interval']
+        tick_interval=config['tick_interval'],
+        ood=ood
     )
 
     env.count = config['start_tick']
@@ -61,5 +68,8 @@ if __name__ == '__main__':
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     config = args.config
     gpu = args.gpu + 1
+
+    if gpu == 1:
+        print("GPU 0 is broken... Only allah knows why. Every other gpu works.")
 
     run()
