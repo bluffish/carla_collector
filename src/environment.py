@@ -42,6 +42,10 @@ class Environment:
         self.timestamp = 0.0
 
         self.vehicles = []
+        self.animal_locations = []
+        self.ego_vehicles = []
+        self.animals = []
+
         self.ood = ood
 
         self.weather = [
@@ -86,9 +90,46 @@ class Environment:
         self.vehicles.append(vehicle)
         return vehicle
 
+    def spawn_animal(self):
+        blueprint = self.world.get_blueprint_library().find(random.choice(self.ood))
+        animal = None
+
+        k = 0
+
+        while animal is None:
+            if k > 30:
+                break
+            k += 1
+
+            transform = random.choice(self.world.get_map().get_spawn_points())
+            transform.location.z = 0.
+            transform.rotation.yaw = random.randint(0, 360)
+
+            good = True
+
+            for location in self.animal_locations:
+                d = transform.location.distance(location)
+
+                if d < 5.:
+                    good = False
+                    break
+
+            for actor in self.vehicles:
+                d = transform.location.distance(actor.vehicle.get_location())
+
+                if d < 5.:
+                    good = False
+                    break
+
+            if good:
+                animal = self.world.spawn_actor(blueprint, transform)
+                self.animal_locations.append(transform.location)
+                self.animals.append(animal)
+
     def run_episode(self, save_path, num_ego=5, num_traffic=50, episode_length=50):
-        ego_vehicles = []
-        animal_locations = []
+        self.ego_vehicles = []
+        self.animal_locations = []
+        self.animals = []
 
         print(f"Using town: {self.towns[self.town_index]}")
         self.load_world(self.towns[self.town_index])
@@ -97,7 +138,7 @@ class Environment:
 
         weather_index = 0
         for _ in tqdm(range(num_ego), desc="Spawning ego vehicles..."):
-            ego_vehicles.append(self.add_vehicle(ego=True))
+            self.ego_vehicles.append(self.add_vehicle(ego=True))
 
         for _ in tqdm(range(num_traffic), desc="Spawning traffic..."):
             self.add_vehicle(ood=False)
@@ -110,38 +151,7 @@ class Environment:
 
         if self.ood is not None:
             for _ in tqdm(range(40), "Spawning OOD"):
-                blueprint = self.world.get_blueprint_library().find(random.choice(self.ood))
-                animal = None
-
-                k = 0
-
-                while animal is None:
-                    if k > 30:
-                        break
-                    k += 1
-                    transform = random.choice(self.world.get_map().get_spawn_points())
-                    transform.location.z = 0.
-                    transform.rotation.yaw = random.randint(0, 360)
-
-                    good = True
-
-                    for location in animal_locations:
-                        d = transform.location.distance(location)
-
-                        if d < 5.:
-                            good = False
-                            break
-
-                    for actor in self.vehicles:
-                        d = transform.location.distance(actor.vehicle.get_location())
-
-                        if d < 5.:
-                            good = False
-                            break
-
-                    if good:
-                        animal = self.world.spawn_actor(blueprint, transform)
-                        animal_locations.append(transform.location)
+                self.spawn_animal()
 
         for _ in range(5):
             if self.sync:
@@ -152,8 +162,10 @@ class Environment:
         if os.path.exists(os.path.join("./", save_path, "agents", "0", "back_camera")) and self.count == -1:
             self.count = len(os.listdir(os.path.join("./", save_path, "agents", "0", "back_camera")))
             print(f"Setting count to {self.count}")
+        elif self.count == -1
+            self.count = 0
 
-        for vehicle_id, vehicle in enumerate(ego_vehicles):
+        for vehicle_id, vehicle in enumerate(self.ego_vehicles):
             info_data = {'sensors': {}}
             agent_path = os.path.join("./", save_path, "agents", str(vehicle_id))
             os.makedirs(agent_path, exist_ok=True)
@@ -181,8 +193,19 @@ class Environment:
                 bar.set_description(f"Current weather: {self.weather[weather_index]}")
                 weather_index += 1
 
+            for animal in self.animals:
+                for actor in self.vehicles:
+                    d = animal.get_transform().location.distance(actor.vehicle.get_location())
+
+                    if d < 3.:
+                        animal.destroy()
+                        self.animals.remove(animal)
+                        self.spawn_animal()
+                        print(len(self.animals))
+                        break
+
             if tick % 5 == 0:
-                for vehicle_id, vehicle in enumerate(ego_vehicles):
+                for vehicle_id, vehicle in enumerate(self.ego_vehicles):
                     agent_path = os.path.join("./", save_path, "agents", str(vehicle_id))
                     vehicle.tick()
 
