@@ -9,5 +9,5 @@
  * Inbuilt episode control system
 
 **Used to gather a dataset for papers** 
- * Evaluating Uncertainty Quantification for Bird’s Eye View Semantic Segmentation
- * Uncertainty-Focused Semantic Segmentation in BEV for Autonomous Systems: Methods and Benchmarks
+ * _Evaluating Uncertainty Quantification for Bird’s Eye View Semantic Segmentation_ (Yang et al)
+ * _Uncertainty-Focused Semantic Segmentation in BEV for Autonomous Systems: Methods and Benchmarks_ (Lin et al)
