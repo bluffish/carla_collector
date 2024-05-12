@@ -1,6 +1,8 @@
 # CARLA Collector
 
 **A project that easily synthesizes autonomous driving datasets**. Uses the driving simulator, [CARLA](https://github.com/carla-simulator/carla).
+
+![](dataset_demo.png)
     
 **Features**
  * Gathers multi-modal sensor data from surrounding cameras, LiDAR, and radar. 
